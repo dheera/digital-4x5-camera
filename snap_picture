@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+
+import atexit
+import sys
+import time
+from stepper import Stepper
+
+class SnapPicture(object):
+    def __init__(self):
+        self.steppers = [
+            Stepper(0, coil_mapping = (0, 1, 2, 3), power = 63),
+            Stepper(1, coil_mapping = (0, 1, 2, 3), power = 63),
+        ]
+
+        self.current_pos = [0, 0]
+
+    def get_current(self):
+        return 0.0
+
+    def go(self, axis, steps):
+        self.steppers[axis].go(steps)
+        self.coords[axis] += steps
+
+    def calibrate(self)
+        print("Calibrating x axis")
+        while self.get_current() < 2.0:
+            self.go(0, -100)
+        self.current_pos[0] = 0
+
+        print("done")
+
+        time.sleep(0.5)
+
+        print("Calibrating y axis")
+        while self.get_current() < 2.0:
+            self.go(1, -100)
+        self.current_pos[1] = 0
+
+        print("done")
+
+    def capture(self):
+        pass
+
+    def acquire(self):
+        print("Beginning acquisition")
+        for iy in range(10):
+
+            for ix in range(20):
+                self.go(0, 40000/20)
+                self.capture()
+
+            self.go(1, 40000/20)
+
+            for ix in range(20):
+                self.go(0, -40000/20)
+                self.capture()
+
+            self.go(1, 40000/20)
+
+    def start():
+        self.calibrate()
+        self.acquire()
+
+if __name__ == "__main__":
+    SnapPicture().start()
