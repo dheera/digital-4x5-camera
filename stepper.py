@@ -28,15 +28,6 @@ class Stepper(object):
         else:
             raise NameError('MotorHAT Stepper must be between 1 and 2 inclusive')
 
-        self.step2coils = [  [1, 0, 0, 0], 
-                        [1, 1, 0, 0],
-                        [0, 1, 0, 0],
-                        [0, 1, 1, 0],
-                        [0, 0, 1, 0],
-                        [0, 0, 1, 1],
-                        [0, 0, 0, 1],
-                        [1, 0, 0, 1] ]
-
         self.step2coils = [
             [1, 0, 0, 0], 
             [1, 0, 1, 0], 
@@ -48,16 +39,16 @@ class Stepper(object):
             [1, 0, 0, 1],
         ]
 
-        self.step2coils_f = [
-            [1, 0, 0, 0], 
-            [0, 0, 1, 0],
-            [0, 1, 0, 0],
-            [0, 0, 0, 1],
-            [1, 0, 0, 0], 
-            [0, 0, 1, 0],
-            [0, 1, 0, 0],
-            [0, 0, 0, 1],
-        ]
+        #self.step2coils = [
+        #    [1, 0, 1, 0], 
+        #    [0, 1, 1, 0],
+        #    [0, 1, 0, 1],
+        #    [1, 0, 0, 1],
+        #    [1, 0, 1, 0], 
+        #    [0, 1, 1, 0],
+        #    [0, 1, 0, 1],
+        #    [1, 0, 0, 1],
+        #]
 
         self.coil_mapping = coil_mapping
 

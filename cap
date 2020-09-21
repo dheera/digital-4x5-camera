@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+
+from picamera.array import PiRGBArray
+from picamera import PiCamera
+
+camera = PiCamera()
+rawCapture = PiRGBArray(camera)
+
+time.sleep(0.1)
+
+camera.capture(rawCapture, format = "bgr")
+image = rawCapture.array
+
+print(image.shape)
