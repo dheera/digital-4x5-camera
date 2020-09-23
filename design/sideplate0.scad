@@ -1,14 +1,14 @@
 L=170;
-W=80;
+W=86;
 T=1.5;
 
 difference() {
     union() {
         cube_center([L,W,T]);
-        translate([0,0,T])
+        translate([0,6/2,T])
         difference() {
-            cube_center([L-21,W-21,5]);
-            cube_center([L-21-2*T,W-21-2*T,5]);
+            cube_center([L-21,W-6-21,5]);
+            cube_center([L-21-2*T,W-21-6-2*T,5]);
         }
     }
     

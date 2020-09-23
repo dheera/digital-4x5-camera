@@ -7,18 +7,16 @@ difference() {
     }
     
     translate([0,0,4.5])
-    cube_center([149.7-3,149.7-3,50]);
+    cube_center([149.7-4,149.7-4,50]);
     
     translate([0,0,3])
-    cube_center([149.7-3-3,149.7-3-3,50]);
+    cube_center([149.7-4-3,149.7-4-3,50]);
     
     translate([0,0,1.5])
-    cube_center([149.7-3-3-3,149.7-3-3-3,50]);
+    cube_center([149.7-4-3-3,149.7-4-3-3,50]);
     
-    cube_center([149.7-3-9,149.7-3-9,50]);
+    cube_center([149.7-4-9,149.7-4-9,50]);
     
-    translate([0,5,TT+3+3+5])
-    cube_center([149.7-3,149.7-3,50]);
     
     for(t=[0,1])
     rotate([0,0,t*90])
@@ -37,7 +35,7 @@ module cube_center(dims,r=0) {
         minkowski() {
             translate([-dims[0]/2+r, -dims[1]/2+r, 0])
             cube([dims[0]-2*r,dims[1]-2*r,dims[2]]);
-            cylinder(r=r,h=0.00001,$fn=32);
+            cylinder(r=r,h=0.00001,$fn=64);
         }
     }
 }

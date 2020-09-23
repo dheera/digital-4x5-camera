@@ -15,35 +15,35 @@ difference() {
         cylinder(d=3.5,h=10,$fn=16);
     }
     
-    translate([-31,-5.5,0.0])
+    translate([-28,-5.5,0.0])
     rotate([0,0,180])
     minus_raspberrypi();
     
-    translate([31,7,0.0])
+    translate([41,12,0.0])
     minus_ina219();
     
     
 
 translate([60,9]) {
-    for(x=[-10:10:10])
+    for(x=[0:10:10])
         for(y=[-10:10:10])
             translate([x,y,0])
             cylinder(d=2,h=10,$fn=16);
 }
 }
 
-translate([-31,-5.5,1.5])
+translate([-28,-5.5,1.5])
 rotate([0,0,180])
 raspberrypi();
 
-translate([31,7,1.5])
+translate([41,12,1.5])
 ina219();
 
-translate([45,-20,1.5])
+translate([55,-20,1.5])
 dcdc();
 
 module dcdc() {
-    border(w=52,h=27);
+    // border(w=52,h=27);
     translate([-20,0,0])
     cylinder(d1=3.5,d2=4.5,h=4,$fn=16);
     translate([20,0,0])
@@ -85,7 +85,7 @@ module minus_raspberrypi() {
     cube_center([60,35,5]);
     
     translate([-36,0,0])
-    cube_center([20,20,5]);
+    cube_center([36,20,5]);
 }
 
 module ina219(standoff_height=4.5) {

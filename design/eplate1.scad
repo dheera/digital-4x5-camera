@@ -22,6 +22,14 @@ difference() {
     cylinder(d=3.2,h=10,$fn=32);
 }
 
+translate([0,-3,1.5])
+difference () {
+    cube_center([78,56,23]);
+    cube_center([75,53,23-1.5]);
+    cube_center([55,35,100]);
+tu  j    cube_center([100,15,8]);
+}
+
 module cube_center(dims,r=0) {
     if(r==0) {
         translate([-dims[0]/2, -dims[1]/2, 0])
