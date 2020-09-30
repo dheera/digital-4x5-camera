@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+
+import atexit
+import json
+import numpy as np
+import sys
+import time
+from camera.calibrated_stepper import CalibratedStepper
+from camera.config import config
+
+class PictureScan(object):
+    def __init__(self, profile, config):
+        self.steppers = [
+            CalibratedStepper(0, power = 127),
+            CalibratedStepper(1, power = 127),
+        ]
+
+        self.sensor_tiles = np.array(profile["dimensions"]) / np.array(config["sensor"]["sensor_size"])
+
+        self.total_steps = (np.array(profile["dimensions"]) / np.array([
+            config["axes"][0]["distance_per_step"],
+            config["axes"][1]["distance_per_step"],
+        ])).astype(np.int32)
+
+        self.tile_size_steps = (np.array(config["sensor"]["sensor_size"]) / np.array([
+            config["axes"][0]["distance_per_step"],
+            config["axes"][1]["distance_per_step"],
+        ]) * (1 - np.array(profile["overlap"]))).astype(np.int32)
+
+        self.half_num_tiles = np.ceil(self.total_steps / self.tile_size_steps / 2).astype(np.int32)
+
+        self.center_steps = (np.array([config["axes"][0]["steps"], config["axes"][1]["steps"]]) / 2).astype(np.int32)
+
+        print("sensor_tiles:", self.sensor_tiles)
+        print("total_steps:", self.total_steps)
+        print("steps_per_sensor:", self.tile_size_steps)
+        print("half_num_tiles", self.half_num_tiles)
+
+    def capture(self):
+        print("Capturing")
+        pass
+
+    def acquire(self):
+        print("Beginning acquisition")
+
+        print(np.arange(-self.half_num_tiles[1], self.half_num_tiles[1]))
+        for ytile in np.arange(-self.half_num_tiles[1], self.half_num_tiles[1]):
+            for xtile in np.arange(-self.half_num_tiles[0], self.half_num_tiles[0]):
+                target_coords = np.array([xtile, ytile], dtype = np.int32) * self.tile_size_steps + self.center_steps
+                print("Moving to tile (%d, %d) step (%d, %d)" % (xtile, ytile, target_coords[0], target_coords[1]))
+                print("0")
+                self.steppers[0].goto(int(target_coords[0]))
+                print("1")
+                self.steppers[1].goto(target_coords[1])
+                time.sleep(1.0)
+                self.capture()
+
+    def start(self):
+        self.acquire()
+
+if __name__ == "__main__":
+    with open(sys.argv[1], "r") as f:
+        profile = json.loads(f.read())
+    PictureScan(profile, config).start()
