@@ -11,8 +11,8 @@ from camera.config import config
 class PictureScan(object):
     def __init__(self, profile, config):
         self.steppers = [
-            CalibratedStepper(0, power = 127),
-            CalibratedStepper(1, power = 127),
+            CalibratedStepper(0, power = 127, delay=0.00025),
+            CalibratedStepper(1, power = 127, delay=0.00025),
         ]
 
         self.sensor_tiles = np.array(profile["dimensions"]) / np.array(config["sensor"]["sensor_size"])
@@ -44,16 +44,20 @@ class PictureScan(object):
         print("Beginning acquisition")
 
         print(np.arange(-self.half_num_tiles[1], self.half_num_tiles[1]))
+        i = 0
         for ytile in np.arange(-self.half_num_tiles[1], self.half_num_tiles[1]):
             for xtile in np.arange(-self.half_num_tiles[0], self.half_num_tiles[0]):
+                i += 1
                 target_coords = np.array([xtile, ytile], dtype = np.int32) * self.tile_size_steps + self.center_steps
                 print("Moving to tile (%d, %d) step (%d, %d)" % (xtile, ytile, target_coords[0], target_coords[1]))
-                print("0")
+                t = time.time()
                 self.steppers[0].goto(int(target_coords[0]))
-                print("1")
-                self.steppers[1].goto(target_coords[1])
-                time.sleep(1.0)
+                self.steppers[1].goto(int(target_coords[1]))
+                print("Moving time: %f s " % (time.time() - t))
+                time.sleep(0.5)
                 self.capture()
+
+        print("Total tiles: %d" % i)
 
     def start(self):
         self.acquire()
