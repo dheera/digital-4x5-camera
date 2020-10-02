@@ -8,6 +8,7 @@ import sys
 import time
 from camera.calibrated_stepper import CalibratedStepper
 from camera.config import config
+from camera.helpers import *
 
 import io
 import picamerax
@@ -50,7 +51,7 @@ class PictureScan(object):
 
         self.picam = picamerax.PiCamera()
 
-        self.fnstem = str(int(time.time()))
+        self.fnstem = "%s-%s" % (random_word(), random_word())
 
         os.system("mkdir -p output/%s" % self.fnstem)
 

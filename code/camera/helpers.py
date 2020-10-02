@@ -2,9 +2,9 @@
 import numpy as np
 import io
 import cv2
+import os
+import random
 import sys
-
-img = sys.argv[1]
 
 def read_raw(fn):
     file = open(fn, 'rb')
@@ -29,3 +29,10 @@ def superpixel_debayer(img):
     g = img[1::2, 0::2] + img[0::2, 1::2]
     r = img[1::2, 1::2] << 1
     return np.dstack([b, g, r])
+
+with open(os.path.join(os.path.dirname(__file__), "words.txt"), "r") as f:
+    words = f.readlines()
+
+def random_word():
+    global words
+    return random.choice(words).strip()
