@@ -7,7 +7,7 @@ from camera.stepper import Stepper
 if __name__ == "__main__":
     axis = int(sys.argv[1])
     steps = int(sys.argv[2])
-    s = Stepper(axis, coil_mapping = (0, 1, 2, 3), power = 127)
+    s = Stepper(axis, coil_mapping = (0, 1, 2, 3), power = 127, delay = 0.0005)
     atexit.register(lambda: s.off())
     s.go(steps)
 

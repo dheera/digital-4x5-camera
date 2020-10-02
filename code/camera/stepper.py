@@ -3,13 +3,20 @@
 from .Raspi_PWM_Servo_Driver import PWM
 import atexit
 import time
+import redis
+
+ADDR = 0x6f
+PWM_FREQ = 1600
+
+pwm = PWM(ADDR, debug=False)
+pwm.setPWMFreq(PWM_FREQ)
 
 class Stepper(object):
-    def __init__(self, num, addr = 0x6f, freq = 1600, coil_mapping = (0, 1, 2, 3), delay = 0.0001, power = 63):
-        self.addr = addr
+    def __init__(self, num, coil_mapping = (0, 1, 2, 3), delay = 0.0005, power = 127):
         self.num = num
-        self._pwm = PWM(addr, debug=False)
-        self._pwm.setPWMFreq(freq)
+        self.red = redis.Redis()
+        self.phase_key = "phase_%d" % self.num
+        self._pwm = pwm
 
         self.delay = delay
 
@@ -54,11 +61,11 @@ class Stepper(object):
 
         self.coil_mapping = coil_mapping
 
-        self.current_step = 0
+        self.current_step = int(self.red.get(self.phase_key) or 0)
 
-        pwm_a = pwm_b = power
-        self._pwm.setPWM(self.PWMA, 0, pwm_a*16)
-        self._pwm.setPWM(self.PWMB, 0, pwm_b*16)
+        pwm_a = pwm_b = min(max(power * 16, 0), 0x0FFF)
+        self._pwm.setPWM(self.PWMA, pwm_a)
+        self._pwm.setPWM(self.PWMB, pwm_b)
 
     def __del__(self):
         self.off()
@@ -69,9 +76,9 @@ class Stepper(object):
         if (value != 0) and (value != 1):
             raise NameError('Pin value must be 0 or 1!')
         if (value == 0):
-            self._pwm.setPWM(pin, 0, 4096)
+            self._pwm.setPWM(pin, 0)
         if (value == 1):
-            self._pwm.setPWM(pin, 4096, 0)
+            self._pwm.setPWM(pin, 0xFFF)
 
     def off(self):
         self._setPin(self.AIN1, 0)
@@ -92,6 +99,14 @@ class Stepper(object):
         old_coils = [0, 0, 0, 0]
 
         for i in range(num_steps):
+            #if i < 100:
+            #    actual_delay = delay * (100 - i)
+            #elif (num_steps - i) < 100:
+            #    actual_delay = delay * (100 - (num_steps - i))
+            #else:
+            #    actual_delay = delay
+            #print(actual_delay)
+
             self.current_step += sign
             coils = self.step2coils[self.current_step % 8]
             if coils[self.coil_mapping[0]] != old_coils[self.coil_mapping[0]]:
@@ -105,6 +120,8 @@ class Stepper(object):
 
             old_coils = coils
             time.sleep(delay)
+
+        self.red.set(self.phase_key, str(self.current_step))
 
 def turnOffMotors():
     global s
