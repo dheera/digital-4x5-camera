@@ -3,16 +3,21 @@
 import atexit
 import json
 import numpy as np
+import os
 import sys
 import time
 from camera.calibrated_stepper import CalibratedStepper
 from camera.config import config
 
+import io
+import picamerax
+import picamerax.array
+
 class PictureScan(object):
     def __init__(self, profile, config):
         self.steppers = [
             CalibratedStepper(0, power = 127),
-            #CalibratedStepper(1, power = 127),
+            CalibratedStepper(1, power = 127),
         ]
 
         self.sensor_tiles = np.array(profile["dimensions"]) / np.array(config["sensor"]["sensor_size"])
@@ -22,41 +27,67 @@ class PictureScan(object):
             config["axes"][1]["distance_per_step"],
         ])).astype(np.int32)
 
-        self.tile_size_steps = (np.array(config["sensor"]["sensor_size"]) / np.array([
+        self.tile_size_steps = np.array(config["sensor"]["sensor_size"]) / np.array([
             config["axes"][0]["distance_per_step"],
             config["axes"][1]["distance_per_step"],
-        ]) * (1 - np.array(profile["overlap"]))).astype(np.int32)
+        ])
 
-        self.half_num_tiles = np.ceil(self.total_steps / self.tile_size_steps / 2).astype(np.int32)
+        self.adjusted_increment_steps = (self.tile_size_steps * (1 - np.array(profile["overlap"]))).astype(np.int32)
+
+        self.num_tiles = np.ceil(self.total_steps / self.adjusted_increment_steps).astype(np.int32)
 
         self.center_steps = (np.array([config["axes"][0]["steps"], config["axes"][1]["steps"]]) / 2).astype(np.int32)
 
         print("sensor_tiles:", self.sensor_tiles)
         print("total_steps:", self.total_steps)
-        print("steps_per_sensor:", self.tile_size_steps)
-        print("half_num_tiles", self.half_num_tiles)
+        print("tile_size_steps:", self.tile_size_steps)
+        print("adjusted_increment_steps:", self.adjusted_increment_steps)
+        print("num_tiles:", self.num_tiles)
+        print("center_steps:", self.center_steps)
 
-    def capture(self):
+        self.picam = picamerax.PiCamera()
+
+        self.fnstem = str(int(time.time()))
+
+        os.system("mkdir -p output/%s" % self.fnstem)
+
+    def capture(self, name):
         print("Capturing")
-        pass
+        stream = io.BytesIO()
+        # stream = picamerax.array.PiBayerArray(self.picam)
+        self.picam.capture(stream, format = 'jpeg', bayer = True)
+        with open("%s.jpg" % name, "wb") as f:
+            f.write(stream.getbuffer())
+        # np.save(name, stream.array)
+        # output = (stream.demosaic() >> 2).astype(np.uint8)
+        # print(output.shape)
 
     def acquire(self):
         print("Beginning acquisition")
 
-        print(np.arange(-self.half_num_tiles[1], self.half_num_tiles[1]))
-        for ytile in np.arange(-self.half_num_tiles[1], self.half_num_tiles[1]):
-            for xtile in np.arange(-self.half_num_tiles[0], self.half_num_tiles[0]):
-                target_coords = np.array([xtile, ytile], dtype = np.int32) * self.tile_size_steps + self.center_steps
-                print("Moving to tile (%d, %d) step (%d, %d)" % (xtile, ytile, target_coords[0], target_coords[1]))
-                print("0")
+        print("total_tiles_to_acquire: %d" % (self.num_tiles[1] * self.num_tiles[0]))
+        time.sleep(2)
+
+        parity = False
+        for yn in np.arange(-self.num_tiles[1] / 2 + 0.5, self.num_tiles[1] / 2 + 0.5):
+            ytile = (yn * self.adjusted_increment_steps[1]).astype(np.int32)
+            if parity:
+                rangexn = reversed(np.arange(-self.num_tiles[0] / 2 + 0.5, self.num_tiles[0] / 2 + 0.5))
+            else:
+                rangexn = np.arange(-self.num_tiles[0] / 2 + 0.5, self.num_tiles[0] / 2 + 0.5)
+            for xn in rangexn:
+                xtile = (xn * self.adjusted_increment_steps[0]).astype(np.int32)
+                target_coords = np.array([xtile, ytile], dtype = np.int32) + self.center_steps
+                print("Moving to tile (%f, %f) step (%d, %d)" % (xn, yn, target_coords[0], target_coords[1]))
                 self.steppers[0].goto(int(target_coords[0]))
-                #print("1")
-                #self.steppers[1].goto(target_coords[1])
-                time.sleep(1.0)
-                self.capture()
+                self.steppers[1].goto(int(target_coords[1]))
+                time.sleep(0.1)
+                self.capture("output/%s/img_%d_%d" % (self.fnstem, xn, yn))
+            parity = not parity
 
     def start(self):
         self.acquire()
+        return
 
 if __name__ == "__main__":
     with open(sys.argv[1], "r") as f:

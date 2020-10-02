@@ -7,5 +7,8 @@ from camera.calibrated_stepper import CalibratedStepper
 if __name__ == "__main__":
     axis = int(sys.argv[1])
     s = CalibratedStepper(axis, power = 127)
-    s.zero()
+    if len(sys.argv) > 2:
+        s.zero(int(sys.argv[2]))
+    else:
+        s.zero()
 
