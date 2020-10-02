@@ -14,6 +14,9 @@ import io
 import picamerax
 import picamerax.array
 
+DRY_RUN = "--dry-run" in sys.argv
+NO_PREVIEW = "--no-preview" in sys.argv
+
 class PictureScan(object):
     def __init__(self, profile, config):
         self.profile = profile
@@ -53,7 +56,8 @@ class PictureScan(object):
 
         self.fnstem = "%s-%s" % (random_word(), random_word())
 
-        os.system("mkdir -p output/%s" % self.fnstem)
+        if not DRY_RUN:
+            os.system("mkdir -p output/%s" % self.fnstem)
 
     def capture(self, name):
         print("Capturing")
@@ -69,33 +73,36 @@ class PictureScan(object):
     def acquire(self):
         print("Beginning acquisition")
 
+        if not NO_PREVIEW:
+            self.picam.start_preview()
+
         print("total_tiles_to_acquire: %d" % (self.num_tiles[1] * self.num_tiles[0]))
         time.sleep(2)
 
-        parity = False
-
         yrange_enumerated = list(enumerate(np.arange(-self.num_tiles[1] / 2 + 0.5, self.num_tiles[1] / 2 + 0.5)))
         xrange_enumerated_even = list(enumerate(np.arange(-self.num_tiles[0] / 2 + 0.5, self.num_tiles[0] / 2 + 0.5)))
-        xrange_enumerated_odd = reversed(list(enumerate(np.arange(-self.num_tiles[0] / 2 + 0.5, self.num_tiles[0] / 2 + 0.5))))
+        xrange_enumerated_odd = list(reversed(list(enumerate(np.arange(-self.num_tiles[0] / 2 + 0.5, self.num_tiles[0] / 2 + 0.5)))))
 
         for iyn, yn in yrange_enumerated:
             ytile = (yn * self.adjusted_increment_steps[1]).astype(np.int32)
-            if parity:
+            if iyn % 2 == 1:
                 xrange_enumerated = xrange_enumerated_odd
             else:
                 xrange_enumerated = xrange_enumerated_even
+            print(iyn, yn, xrange_enumerated)
             for ixn, xn in xrange_enumerated:
                 xtile = (xn * self.adjusted_increment_steps[0]).astype(np.int32)
                 target_coords = np.array([xtile, ytile], dtype = np.int32) + self.center_steps
                 print("Moving to tile (%f, %f) step (%d, %d)" % (xn, yn, target_coords[0], target_coords[1]))
-                self.steppers[0].goto(int(target_coords[0]))
-                self.steppers[1].goto(int(target_coords[1]))
-                time.sleep(0.1)
-                self.capture("output/%s/img_%d_%d" % (self.fnstem, ixn, iyn))
-            parity = not parity
+                if not DRY_RUN:
+                    self.steppers[0].goto(int(target_coords[0]))
+                    self.steppers[1].goto(int(target_coords[1]))
+                    time.sleep(0.1)
+                    self.capture(os.path.join("output", self.fnstem, "img_%d_%d" % (ixn, iyn)))
 
-        with open("output/%s/profile.json", "w") as f:
-            f.write(json.dumps(self.profile))
+        if not DRY_RUN:
+            with open(os.path.join("output/%s" % self.fnstem, "profile.json"), "w") as f:
+                f.write(json.dumps(self.profile))
 
     def start(self):
         self.acquire()

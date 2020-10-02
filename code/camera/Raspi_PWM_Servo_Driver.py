@@ -80,20 +80,16 @@ class PWM :
   def setPWM(self, channel, value):
     "Sets a single PWM channel"
     if value == 0x0FFF:
-        values = [
-            0x10, 0x00, 0x00, 0x00
-        ]
+        values = (0x10, 0x00, 0x00, 0x00)
     elif value == 0x0000:
-        values = [
-            0x00, 0x00, 0x10, 0x00
-        ]
+        values = (0x00, 0x00, 0x10, 0x00)
     else:
-        values = [
+        values = (
             0x00,
             0x00,
             (value + 1) & 0xFF,
             (value + 1) >> 8,
-        ]
+        )
 
     # doesn't work wtf
     # self.i2c.writeList(
@@ -105,11 +101,6 @@ class PWM :
     self.i2c.write8(self.__LED0_ON_H+4*channel, values[1])
     self.i2c.write8(self.__LED0_OFF_L+4*channel, values[2])
     self.i2c.write8(self.__LED0_OFF_H+4*channel, values[3])
-
-    #self.i2c.write8(self.__LED0_ON_L+4*channel, on & 0xFF)
-    #self.i2c.write8(self.__LED0_ON_H+4*channel, on >> 8)
-    #self.i2c.write8(self.__LED0_OFF_L+4*channel, off & 0xFF)
-    #self.i2c.write8(self.__LED0_OFF_H+4*channel, off >> 8)
 
   def setAllPWM(self, on, off):
     "Sets a all PWM channels"
