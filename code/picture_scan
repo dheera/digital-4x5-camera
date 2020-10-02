@@ -15,6 +15,9 @@ import picamerax.array
 
 class PictureScan(object):
     def __init__(self, profile, config):
+        self.profile = profile
+        self.config = config
+
         self.steppers = [
             CalibratedStepper(0, power = 127),
             CalibratedStepper(1, power = 127),
@@ -69,21 +72,29 @@ class PictureScan(object):
         time.sleep(2)
 
         parity = False
-        for yn in np.arange(-self.num_tiles[1] / 2 + 0.5, self.num_tiles[1] / 2 + 0.5):
+
+        yrange_enumerated = list(enumerate(np.arange(-self.num_tiles[1] / 2 + 0.5, self.num_tiles[1] / 2 + 0.5)))
+        xrange_enumerated_even = list(enumerate(np.arange(-self.num_tiles[0] / 2 + 0.5, self.num_tiles[0] / 2 + 0.5)))
+        xrange_enumerated_odd = reversed(list(enumerate(np.arange(-self.num_tiles[0] / 2 + 0.5, self.num_tiles[0] / 2 + 0.5))))
+
+        for iyn, yn in yrange_enumerated:
             ytile = (yn * self.adjusted_increment_steps[1]).astype(np.int32)
             if parity:
-                rangexn = reversed(np.arange(-self.num_tiles[0] / 2 + 0.5, self.num_tiles[0] / 2 + 0.5))
+                xrange_enumerated = xrange_enumerated_odd
             else:
-                rangexn = np.arange(-self.num_tiles[0] / 2 + 0.5, self.num_tiles[0] / 2 + 0.5)
-            for xn in rangexn:
+                xrange_enumerated = xrange_enumerated_even
+            for ixn, xn in xrange_enumerated:
                 xtile = (xn * self.adjusted_increment_steps[0]).astype(np.int32)
                 target_coords = np.array([xtile, ytile], dtype = np.int32) + self.center_steps
                 print("Moving to tile (%f, %f) step (%d, %d)" % (xn, yn, target_coords[0], target_coords[1]))
                 self.steppers[0].goto(int(target_coords[0]))
                 self.steppers[1].goto(int(target_coords[1]))
                 time.sleep(0.1)
-                self.capture("output/%s/img_%d_%d" % (self.fnstem, xn, yn))
+                self.capture("output/%s/img_%d_%d" % (self.fnstem, ixn, iyn))
             parity = not parity
+
+        with open("output/%s/profile.json", "w") as f:
+            f.write(json.dumps(self.profile))
 
     def start(self):
         self.acquire()
