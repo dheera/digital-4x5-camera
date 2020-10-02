@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 
 import glob
+import json
 import os
 import sys
 import cv2
 import numpy as np
-from helpers import *
+from camera.helpers import *
 
 image_files = []
 nbounds = [-1, -1]
+
+print("Reading profile ...")
+with open(os.path.join(sys.argv[1], "profile.json")) as f:
+    profile = json.loads(f.read())
+    overlap = profile.get("overlap", [0.0, 0.0])
 
 print("Reading file list ...")
 for fn in os.listdir(sys.argv[1]):
@@ -21,26 +27,35 @@ for fn in os.listdir(sys.argv[1]):
         continue
     xn = int(tokens[0])
     yn = int(tokens[1])
+
+    assert(xn >= 0)
+    assert(yn >= 0)
+
     if xn > nbounds[0]:
         nbounds[0] = xn
     if yn > nbounds[1]:
         nbounds[1] = yn
-    if -xn > nbounds[0]:
-        nbounds[0] = -xn
-    if -yn > nbounds[1]:
-        nbounds[1] = -yn
+
     image_files.append(fn)
 
+assert(nbounds[0] >= 0)
+assert(nbounds[1] >= 0)
+
 print("Checking completeness of file list ...")
-for xn in range(-nbounds[0], nbounds[0]+1):
-    for yn in range(-nbounds[1], nbounds[1]+1):
+for xn in range(0, nbounds[0]+1):
+    for yn in range(0, nbounds[1]+1):
         assert("img_%d_%d.jpg" % (xn, yn) in image_files)
 
-for xn in range(-nbounds[0], nbounds[0]+1):
-    for yn in range(-nbounds[1], nbounds[1]+1):
+output_image = None
+def initialize_output_image(shape):
+    output_image = np.zeros(shape)
+
+for xn in np.arange(-nbounds[0], nbounds[0]+1):
+    for yn in np.arange(-nbounds[1], nbounds[1]+1):
         print("Processing (%d, %d)" % (xn, yn))
         data = read_raw(os.path.join(sys.argv[1], "img_%d_%d.jpg" % (xn, yn)))
         data = superpixel_debayer(data)
-        print(data.shape)
+        if output_image is None:
+            output_image = np.zeros((nbounds[0]+1)*data.shape[0], (nbounds[1]+1)*data.shape[1], data.shape[2])
         cv2.imshow("data", (data >> 4).astype(np.uint8))
         cv2.waitKey(0)
