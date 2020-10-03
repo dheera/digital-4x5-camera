@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+
+import glob
+import json
+import os
+import sys
+import cv2
+import numpy as np
+from camera.helpers import *
+
+img = read_raw(sys.argv[1])
+img = superpixel_debayer(img)
+
+cv2.imshow("img", (img >> 4).astype(np.uint8))
+cv2.imwrite("%s.tiff" % sys.argv[1].replace(".jpg", "").replace(".JPG", ""), img)
+cv2.waitKey(0)
