@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+
+import atexit
+import json
+import numpy as np
+import os
+import sys
+import time
+from camera.calibrated_stepper import CalibratedStepper
+from camera.config import config
+from camera.helpers import *
+
+import io
+import picamerax
+import picamerax.array
+
+DRY_RUN = "--dry-run" in sys.argv
+NO_PREVIEW = "--no-preview" in sys.argv
+
+class SettingsPreview(object):
+    def __init__(self, profile, config):
+        self.profile = profile
+        self.config = config
+
+        self.steppers = [
+            CalibratedStepper(0, power = 127),
+            CalibratedStepper(1, power = 127),
+        ]
+
+        self.picam = picamerax.PiCamera()
+
+    def capture(self, name):
+        print("Capturing")
+        stream = io.BytesIO()
+        # stream = picamerax.array.PiBayerArray(self.picam)
+        self.picam.capture(stream, format = 'jpeg', bayer = True)
+        with open("%s.jpg" % name, "wb") as f:
+            f.write(stream.getbuffer())
+        # np.save(name, stream.array)
+        # output = (stream.demosaic() >> 2).astype(np.uint8)
+        # print(output.shape)
+
+    def start(self):
+        self.picam.start_preview()
+        time.sleep(5)
+        return
+
+if __name__ == "__main__":
+    with open(sys.argv[1], "r") as f:
+        profile = json.loads(f.read())
+    SettingsPreview(profile, config).start()
