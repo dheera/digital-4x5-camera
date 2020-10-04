@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+import os
+import random
+import sys
+from pprint import pprint
+from camera.helpers import *
+
+pprint(read_exif(sys.argv[1]))
