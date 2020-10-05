@@ -109,6 +109,7 @@ class SettingsPreview(object):
             print("ag:", self.picam.analog_gain)
             print("dg:", self.picam.digital_gain)
             print("---")
+            self.picam.annotate_text = "%d %d" % (self.iso_scale[self.iso_index], self.shutter_speed_scale[self.shutter_speed_index])
         self.getch.reset()
 
     def __del__(self):
