@@ -10,6 +10,8 @@ from camera.calibrated_stepper import CalibratedStepper
 from camera.config import config
 from camera.helpers import *
 
+from camera.getch import Getch
+
 import io
 import picamerax
 import picamerax.array
@@ -18,34 +20,99 @@ DRY_RUN = "--dry-run" in sys.argv
 NO_PREVIEW = "--no-preview" in sys.argv
 
 class SettingsPreview(object):
-    def __init__(self, profile, config):
-        self.profile = profile
-        self.config = config
+    def __init__(self):
 
         self.steppers = [
             CalibratedStepper(0, power = 127),
             CalibratedStepper(1, power = 127),
         ]
 
-        self.picam = picamerax.PiCamera()
+        print("Initialzing ...")
 
-    def capture(self, name):
-        print("Capturing")
-        stream = io.BytesIO()
-        # stream = picamerax.array.PiBayerArray(self.picam)
-        self.picam.capture(stream, format = 'jpeg', bayer = True)
-        with open("%s.jpg" % name, "wb") as f:
-            f.write(stream.getbuffer())
-        # np.save(name, stream.array)
-        # output = (stream.demosaic() >> 2).astype(np.uint8)
-        # print(output.shape)
+        self.picam = picamerax.PiCamera()
+        self.picam.awb_mode = "off"
+        #self.picam.exposure_mode = "off"
+        self.iso_scale = [100, 200, 320, 400, 500, 640, 800]
+        self.iso_index = 3
+        self.shutter_speed_scale = [250, 500, 1000, 2000, 4000, 8000, 16000, 32000, 64000, 125000]
+        self.shutter_speed_index = 6
+        self.picam.shutter_speed = self.shutter_speed_scale[self.shutter_speed_index]
+        self.picam.iso = self.iso_scale[self.iso_index]
+        self.awb_gains = [ 1, 1 ]
+        self.picam.awb_gains = self.awb_gains
+        self.picam.framerate = 8
+
+        self.getch = Getch()
+
+        print("done")
 
     def start(self):
         self.picam.start_preview()
         time.sleep(5)
-        return
+        do_exit = False
+        while not do_exit:
+            c = self.getch()
+            if c == '\x03': # Ctrl+C
+                print("exit")
+                do_exit = True
+                continue
+            elif c == '\x1B':
+                c = self.getch()
+                if c == '\x5B':
+                    c = self.getch()
+                    if c == '\x41':
+                        print("up")
+                        self.steppers[1].relative(100)
+                    elif c == '\x42':
+                        print("down")
+                        self.steppers[1].relative(-100)
+                    elif c == '\x43':
+                        print("right")
+                        self.steppers[0].relative(100)
+                    elif c == '\x44':
+                        print("left")
+                        self.steppers[0].relative(-100)
+            elif c == chr(49): # 1
+                print("iso_down")
+                self.iso_index = max(0, (self.iso_index - 1))
+                print(self.iso_index)
+                self.picam.iso = self.iso_scale[self.iso_index]
+            elif c == chr(50): # 2
+                print("iso_up")
+                self.iso_index = min(len(self.iso_scale) - 1, (self.iso_index + 1))
+                print(self.iso_index)
+                self.picam.iso = self.iso_scale[self.iso_index]
+            elif c == chr(51): # 3
+                print("shutter_speed_down")
+                self.shutter_speed_index = max(0, (self.shutter_speed_index - 1))
+                print(self.shutter_speed_index)
+                self.picam.shutter_speed = self.shutter_speed_scale[self.shutter_speed_index]
+            elif c == chr(52): # 4
+                print("shutter_speed_up")
+                self.shutter_speed_index = min(len(self.shutter_speed_scale) - 1, (self.shutter_speed_index + 1))
+                print(self.shutter_speed_index)
+                self.picam.shutter_speed = self.shutter_speed_scale[self.shutter_speed_index]
+            elif c == chr(13):
+                settings = {
+                    "iso": self.iso_scale[self.iso_index],
+                    "shutter_speed": self.shutter_speed_scale[self.shutter_speed_index],
+                    "awb_gains": self.awb_gains
+                }
+                with open("settings.json", "w") as f:
+                    f.write(json.dumps(settings))
+                do_exit = True
+            else:
+                print(ord(c))
+            print("---")
+            print("exposure speed:", self.picam.exposure_speed)
+            print("iso:", self.picam.iso)
+            print("ag:", self.picam.analog_gain)
+            print("dg:", self.picam.digital_gain)
+            print("---")
+        self.getch.reset()
+
+    def __del__(self):
+        self.getch.reset()
 
 if __name__ == "__main__":
-    with open(sys.argv[1], "r") as f:
-        profile = json.loads(f.read())
-    SettingsPreview(profile, config).start()
+    SettingsPreview().start()

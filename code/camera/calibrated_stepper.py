@@ -17,3 +17,7 @@ class CalibratedStepper(Stepper):
         diff = target - int(self.red.get(self.pos_key))
         self.go(diff)
         self.red.set(self.pos_key, str(target))
+
+    def relative(self, diff):
+        pos = int(self.red.get(self.pos_key))
+        self.goto(pos + diff)
