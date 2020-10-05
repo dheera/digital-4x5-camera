@@ -12,7 +12,8 @@ from camera.helpers import *
 image_files = []
 nbounds = [-1, -1]
 
-DOWNSAMPLE = 4
+DOWNSAMPLE = 8
+PREVIEW_DOWNSAMPLE = 4
 DEBUG = "--debug" in sys.argv
 
 print("Reading profile ...")
@@ -81,16 +82,21 @@ for xn in np.arange(0, nbounds[0]+1):
         data = superpixel_debayer(data).astype(np.float32)
         # data = data[::DOWNSAMPLE, ::DOWNSAMPLE]
         data = downsample(data, DOWNSAMPLE)
+        ccm_a, ccm_b = capture_params[(xn, yn)]["MakerNote"]["ccm"]
+
+        for i in range(data.shape[0]):
+            for j in range(data.shape[1]):
+                data[i,j,:] = np.reshape((np.matmul(ccm_a, np.expand_dims(data[i,j,:], axis = 1)) + ccm_b), (3,))
         m = int(np.amax(data))
         data = np.rot90(data, 2).copy()
         if DEBUG:
-            data = cv2.putText(data, "%d,%d" % (xn, yn), (50, int(data.shape[0]/2)), cv2.FONT_HERSHEY_SIMPLEX, 5, (m, m, m), 15)
+            data = cv2.putText(data, "%d,%d" % (xn, yn), (50, int(data.shape[0]/2)), cv2.FONT_HERSHEY_SIMPLEX, 3, (m, m, m), 15)
 
-        #data /= capture_params[(xn, yn)]["ISOSpeedRatings"] / iso_mean
-        #data /= capture_params[(xn, yn)]["ExposureTime"] / exposure_time_mean
+        data /= capture_params[(xn, yn)]["ISOSpeedRatings"] / iso_mean
+        data /= capture_params[(xn, yn)]["ExposureTime"] / exposure_time_mean
         # data[:,:,0] *= float(capture_params[(xn, yn)]["MakerNote"]["gain_b"])
         # data[:,:,2] *= float(capture_params[(xn, yn)]["MakerNote"]["gain_r"])
-        data /= float(capture_params[(xn, yn)]["MakerNote"]["ag"])
+        # data /= float(capture_params[(xn, yn)]["MakerNote"]["ag"])
 
         print(data.shape)
 
@@ -107,7 +113,7 @@ for xn in np.arange(0, nbounds[0]+1):
 
         output_image[ starty : starty+data.shape[0], startx : startx+data.shape[1], : ] = data
 
-        output_image_downsized = output_image[::8, ::8, :]
+        output_image_downsized = output_image[::PREVIEW_DOWNSAMPLE, ::PREVIEW_DOWNSAMPLE, :]
         output_image_downsized = (255 * (output_image_downsized / np.amax(output_image_downsized))).astype(np.uint8)
 
         cv2.imshow("output", output_image_downsized)

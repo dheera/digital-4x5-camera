@@ -21,9 +21,23 @@ def parse_maker_note(maker_note):
             camera_parameters[last_key] = v
         else:
             camera_parameters[last_key] += " " + p
+
+    ccm_values = camera_parameters["ccm"].split(",")
+    ccm_a = np.reshape(np.array(ccm_values[0:9], dtype = np.int32), (3,3))
+    ccm_b = np.reshape(np.array(ccm_values[9:12], dtype = np.int32), (3,1))
+    camera_parameters["ccm"] = (ccm_a, ccm_b)
     return camera_parameters
 
 def downsample(array, factor):
+    mod_0 = array.shape[0] % factor
+    mod_1 = array.shape[1] % factor
+    if mod_0 != 0:
+        array = array[0:array.shape[0] - mod_0, :, :]
+    if mod_1 != 0:
+        array = array[:, 0:array.shape[1] - mod_1, :]
+
+    print(array.shape)
+
     output = array[::factor, ::factor, :].copy()
     for i in range(factor - 1):
         for j in range(factor - 1):
