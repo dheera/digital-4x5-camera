@@ -10,7 +10,6 @@ from camera.calibrated_stepper import CalibratedStepper
 from camera.config import config
 from camera.helpers import *
 
-import io
 import picamerax
 import picamerax.array
 
@@ -18,9 +17,10 @@ DRY_RUN = "--dry-run" in sys.argv
 NO_PREVIEW = "--no-preview" in sys.argv
 
 class PictureScan(object):
-    def __init__(self, profile, config):
+    def __init__(self, profile, config, settings):
         self.profile = profile
         self.config = config
+        self.settings = settings
 
         self.steppers = [
             CalibratedStepper(0, power = 127),
@@ -59,16 +59,19 @@ class PictureScan(object):
         if not DRY_RUN:
             os.system("mkdir -p output/%s" % self.fnstem)
 
-    def capture(self, name):
-        print("Capturing")
-        stream = io.BytesIO()
-        # stream = picamerax.array.PiBayerArray(self.picam)
-        self.picam.capture(stream, format = 'jpeg', bayer = True)
-        with open("%s.jpg" % name, "wb") as f:
-            f.write(stream.getbuffer())
-        # np.save(name, stream.array)
-        # output = (stream.demosaic() >> 2).astype(np.uint8)
-        # print(output.shape)
+        print("Setting settings ...")
+        self.picam.framerate = 1e6 / self.settings.get("shutter_speed", 32000)
+        self.picam.awb_mode = "off"
+        self.picam.awb_gains = self.settings.get("awb_gains", [1, -1])
+        self.picam.iso = self.settings.get("iso", 100)
+        self.picam.shutter_speed = self.settings.get("shutter_speed", 32000)
+        time.sleep(2)
+        self.picam.exposure_mode = self.settings.get("exposure_mode", "off")
+        print("shutter_speed", self.picam.shutter_speed, self.picam.exposure_speed)
+        print("iso", self.picam.iso)
+        print("awb_gains", self.picam.awb_gains)
+        print("gains", self.picam.analog_gain, self.picam.digital_gain)
+        print("done")
 
     def acquire(self):
         print("Beginning acquisition")
@@ -76,12 +79,15 @@ class PictureScan(object):
         if not NO_PREVIEW:
             self.picam.start_preview()
 
-        print("total_tiles_to_acquire: %d" % (self.num_tiles[1] * self.num_tiles[0]))
         time.sleep(2)
+
+        print("total_tiles_to_acquire: %d" % (self.num_tiles[1] * self.num_tiles[0]))
 
         yrange_enumerated = list(enumerate(np.arange(-self.num_tiles[1] / 2 + 0.5, self.num_tiles[1] / 2 + 0.5)))
         xrange_enumerated_even = list(enumerate(np.arange(-self.num_tiles[0] / 2 + 0.5, self.num_tiles[0] / 2 + 0.5)))
         xrange_enumerated_odd = list(reversed(list(enumerate(np.arange(-self.num_tiles[0] / 2 + 0.5, self.num_tiles[0] / 2 + 0.5)))))
+
+        irritator = self.picam.capture_continuous('image{counter:03d}.jpg', format = "jpeg", bayer = True)
 
         for iyn, yn in yrange_enumerated:
             ytile = (yn * self.adjusted_increment_steps[1]).astype(np.int32)
@@ -97,8 +103,8 @@ class PictureScan(object):
                 if not DRY_RUN:
                     self.steppers[0].goto(int(target_coords[0]))
                     self.steppers[1].goto(int(target_coords[1]))
-                    time.sleep(0.1)
-                    self.capture(os.path.join("output", self.fnstem, "img_%d_%d" % (ixn, iyn)))
+                    filename = next(irritator)
+                    os.rename(filename, os.path.join("output", self.fnstem, "img_%d_%d.jpg" % (ixn, iyn)))
 
         if not DRY_RUN:
             with open(os.path.join("output/%s" % self.fnstem, "profile.json"), "w") as f:
@@ -111,4 +117,6 @@ class PictureScan(object):
 if __name__ == "__main__":
     with open(sys.argv[1], "r") as f:
         profile = json.loads(f.read())
-    PictureScan(profile, config).start()
+    with open("settings.json", "r") as f:
+        settings = json.loads(f.read())
+    PictureScan(profile, config, settings).start()
