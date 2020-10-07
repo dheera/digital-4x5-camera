@@ -29,17 +29,38 @@ def parse_maker_note(maker_note):
     camera_parameters["ccm"] = (ccm_a, ccm_b)
     return camera_parameters
 
-@jit(nopython = True, parallel = True)
+@jit(nopython = True)
 def merge_hdr(data, data_hdr, hdr_threshold, hdr_factor):
     half_threshold = hdr_threshold >> 1
-    for i in prange(data.shape[0]):
-        for j in prange(data.shape[1]):
+    for i in range(data.shape[0]):
+        for j in range(data.shape[1]):
             s = np.max(data[i,j,:])
             if s > hdr_threshold:
                 data[i, j, :] =  data_hdr[i, j, :] * hdr_factor
             elif s > half_threshold:
                 fraction = (s - half_threshold) / half_threshold
                 data[i, j, :] =  data[i, j, :] * (1 - fraction) + data_hdr[i,j,:] * hdr_factor * fraction
+    return data
+
+def apply_gradients(data, overlap):
+    height = data.shape[0]
+    width = data.shape[1]
+
+    h_overlap = int(width*overlap[0])
+    v_overlap = int(height*overlap[1])
+
+    h_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(0, 1, h_overlap), axis = 0), height, axis = 0), 2)
+    v_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(0, 1, v_overlap), axis = 1), width, axis = 1), 2)
+
+    data = data.astype(np.float32)
+
+    data[:,0:h_overlap] *= h_grad
+    data[0:v_overlap, :] *= v_grad
+
+    data[-v_overlap:, :] *= v_grad[::-1, :, :]
+    data[:, -h_overlap:] *= h_grad[:, ::-1, :]
+
+    data = data.astype(np.int32)
     return data
 
 
@@ -60,6 +81,12 @@ def downsample(array, factor):
             if i == 0 and j == 0:
                 continue
             output += array[i::factor, j::factor, :]
+
+    #output = np.zeros((int(array.shape[0] / factor), int(array.shape[1] / factor), array.shape[2]))
+    #for i in prange(int(array.shape[0] / factor)):
+    #    for j in prange(int(array.shape[1] / factor)):
+    #        output[i, j, :] = np.sum(np.sum(array[i*factor : (i+1)*factor, j*factor : (j+1)*factor, :], axis = 1), axis = 0)
+
     return output
 
 def read_raw(fn):
