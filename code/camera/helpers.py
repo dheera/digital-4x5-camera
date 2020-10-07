@@ -7,6 +7,7 @@ import random
 import sys
 import PIL.Image
 import PIL.ExifTags
+from numba import jit, prange
 
 def parse_maker_note(maker_note):
     """Split the "maker note" EXIF field from a Raspberry Pi camera image into useful parameters"""
@@ -28,6 +29,21 @@ def parse_maker_note(maker_note):
     camera_parameters["ccm"] = (ccm_a, ccm_b)
     return camera_parameters
 
+@jit(nopython = True, parallel = True)
+def merge_hdr(data, data_hdr, hdr_threshold, hdr_factor):
+    half_threshold = hdr_threshold >> 1
+    for i in prange(data.shape[0]):
+        for j in prange(data.shape[1]):
+            s = np.max(data[i,j,:])
+            if s > hdr_threshold:
+                data[i, j, :] =  data_hdr[i, j, :] * hdr_factor
+            elif s > half_threshold:
+                fraction = (s - half_threshold) / half_threshold
+                data[i, j, :] =  data[i, j, :] * (1 - fraction) + data_hdr[i,j,:] * hdr_factor * fraction
+    return data
+
+
+@jit(nopython = True, parallel = True)
 def downsample(array, factor):
     mod_0 = array.shape[0] % factor
     mod_1 = array.shape[1] % factor
@@ -38,10 +54,12 @@ def downsample(array, factor):
 
     print(array.shape)
 
-    output = array[::factor, ::factor, :].copy()
-    for i in range(factor - 1):
-        for j in range(factor - 1):
-            output += array[(i+1)::factor, (j+1)::factor, :]
+    output = array[::factor, ::factor, :].astype(np.int32)
+    for i in range(factor):
+        for j in range(factor):
+            if i == 0 and j == 0:
+                continue
+            output += array[i::factor, j::factor, :]
     return output
 
 def read_raw(fn):
