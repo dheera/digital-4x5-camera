@@ -12,7 +12,7 @@ from numba import jit
 
 class Stitch(object):
     def __init__(self, image_dir, debug = False):
-        self.DOWNSAMPLE = 8
+        self.DOWNSAMPLE = 4
         self.PREVIEW_DOWNSAMPLE = 4
         self.debug = debug
         self.image_dir = image_dir
@@ -93,7 +93,6 @@ class Stitch(object):
         data = superpixel_debayer(data)
         data = downsample(data, self.DOWNSAMPLE)
         data = np.rot90(data, 2) #.astype(np.float32)
-        print("MAX", np.max(data))
 
         hdr_threshold = 8000 * self.DOWNSAMPLE ** 2
 
@@ -153,8 +152,6 @@ class Stitch(object):
 
                 starty = yn * data.shape[0] + shifty
                 startx = (self.nbounds[0] - xn - 1) * data.shape[1] + shiftx
-
-                print(shiftx, shifty, startx, starty)
 
                 self.output_image[ starty : starty+data.shape[0], startx : startx+data.shape[1], : ] = data
 
