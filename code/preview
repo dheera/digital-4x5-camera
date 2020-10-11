@@ -34,13 +34,13 @@ class SettingsPreview(object):
         #self.picam.exposure_mode = "off"
         self.iso_scale = [100, 200, 320, 400, 500, 640, 800]
         self.iso_index = 3
-        self.shutter_speed_scale = [250, 500, 1000, 2000, 4000, 8000, 16000, 32000, 64000, 125000]
+        self.shutter_speed_scale = [250, 500, 1000, 2000, 4000, 8000, 16000, 32000, 64000, 125000, 250000, 500000]
         self.shutter_speed_index = 6
         self.picam.shutter_speed = self.shutter_speed_scale[self.shutter_speed_index]
         self.picam.iso = self.iso_scale[self.iso_index]
-        self.awb_gains = [ 1, 1 ]
+        self.awb_gains = [ 2.9, 1.7 ]
         self.picam.awb_gains = self.awb_gains
-        self.picam.framerate = 8
+        self.picam.framerate = 2
 
         self.getch = Getch()
 

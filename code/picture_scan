@@ -12,6 +12,12 @@ from camera.helpers import *
 
 import picamerax
 import picamerax.array
+try:
+    import pynput
+    PYNPUT = True
+except ImportError:
+    print("Error loading pynput")
+    PYNPUT = False
 
 DRY_RUN = "--dry-run" in sys.argv
 NO_PREVIEW = "--no-preview" in sys.argv
@@ -52,6 +58,11 @@ class PictureScan(object):
         print("num_tiles:", self.num_tiles)
         print("center_steps:", self.center_steps)
 
+        self.pause = False
+
+        if PYNPUT:
+            pynput.keyboard.Listener(on_press = self.on_press).start()
+
         self.picam = picamerax.PiCamera()
 
         self.fnstem = "%s-%s" % (random_word(), random_word())
@@ -64,7 +75,9 @@ class PictureScan(object):
         self.picam.awb_mode = "off"
         self.picam.awb_gains = self.settings.get("awb_gains", [1, -1])
         self.picam.iso = self.settings.get("iso", 100)
-        self.picam.shutter_speed = self.settings.get("shutter_speed", 32000)
+        self.shutter_speed = self.settings.get("shutter_speed", 32000)
+        self.shutter_speed_hdr = self.settings.get("shutter_speed_hdr")
+        self.picam.shutter_speed = self.shutter_speed
         time.sleep(2)
         self.picam.exposure_mode = self.settings.get("exposure_mode", "off")
         print("shutter_speed", self.picam.shutter_speed, self.picam.exposure_speed)
@@ -72,6 +85,10 @@ class PictureScan(object):
         print("awb_gains", self.picam.awb_gains)
         print("gains", self.picam.analog_gain, self.picam.digital_gain)
         print("done")
+
+    def on_press(self, key):
+        if key == pynput.keyboard.Key.space:
+            self.pause = not self.pause
 
     def acquire(self):
         print("Beginning acquisition")
@@ -87,7 +104,7 @@ class PictureScan(object):
         xrange_enumerated_even = list(enumerate(np.arange(-self.num_tiles[0] / 2 + 0.5, self.num_tiles[0] / 2 + 0.5)))
         xrange_enumerated_odd = list(reversed(list(enumerate(np.arange(-self.num_tiles[0] / 2 + 0.5, self.num_tiles[0] / 2 + 0.5)))))
 
-        irritator = self.picam.capture_continuous('image{counter:03d}.jpg', format = "jpeg", bayer = True)
+        irritator = self.picam.capture_continuous('image{counter:04d}.jpg', format = "jpeg", bayer = True)
 
         for iyn, yn in yrange_enumerated:
             ytile = (yn * self.adjusted_increment_steps[1]).astype(np.int32)
@@ -97,14 +114,26 @@ class PictureScan(object):
                 xrange_enumerated = xrange_enumerated_even
             print(iyn, yn, xrange_enumerated)
             for ixn, xn in xrange_enumerated:
+                while self.pause:
+                    time.sleep(0.1)
+
                 xtile = (xn * self.adjusted_increment_steps[0]).astype(np.int32)
                 target_coords = np.array([xtile, ytile], dtype = np.int32) + self.center_steps
                 print("Moving to tile (%f, %f) step (%d, %d)" % (xn, yn, target_coords[0], target_coords[1]))
                 if not DRY_RUN:
+                    print("Moving stepper 0")
                     self.steppers[0].goto(int(target_coords[0]))
+                    print("Moving stepper 1")
                     self.steppers[1].goto(int(target_coords[1]))
+                    print("Taking picture")
                     filename = next(irritator)
+                    print("Moving file")
                     os.rename(filename, os.path.join("output", self.fnstem, "img_%d_%d.jpg" % (ixn, iyn)))
+                    if self.shutter_speed_hdr:
+                        self.picam.shutter_speed = self.shutter_speed_hdr
+                        filename = next(irritator)
+                        self.picam.shutter_speed = self.shutter_speed
+                        os.rename(filename, os.path.join("output", self.fnstem, "img_%d_%d_hdr.jpg" % (ixn, iyn)))
 
         if not DRY_RUN:
             with open(os.path.join("output/%s" % self.fnstem, "profile.json"), "w") as f:
