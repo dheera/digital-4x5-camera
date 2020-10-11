@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+
+import glob
+import json
+import os
+import sys
+import cv2
+import numpy as np
+import time
+from camera.helpers import *
+from numba import jit
+
+class Stitch(object):
+    def __init__(self, image_dir, debug = False):
+        self.DOWNSAMPLE = 4
+        self.PREVIEW_DOWNSAMPLE = 4
+        self.debug = debug
+        self.image_dir = image_dir
+
+        self.image_files = []
+
+        # maximum bounds of images [nx, ny]
+        # filenames should be img_nx_ny.jpg and optinally also img_nx_ny_hdr.jpg
+        self.nbounds = [-1, -1]
+
+        print("Reading profile ...")
+        with open(os.path.join(image_dir, "profile.json")) as f:
+            self.profile = json.loads(f.read())
+            self.overlap = self.profile.get("overlap", [0.0, 0.0])
+
+        print("Reading file list ...")
+        for fn in os.listdir(sys.argv[1]):
+            if not fn.endswith(".jpg"):
+                continue
+            if not fn.startswith("img_"):
+                continue
+            tokens = fn.replace("img_", "").replace(".jpg", "").split("_")
+            if len(tokens) != 2:
+                continue
+
+            xn = int(tokens[0])
+            yn = int(tokens[1])
+
+            assert(xn >= 0)
+            assert(yn >= 0)
+
+            self.nbounds[0] = max(xn, self.nbounds[0])
+            self.nbounds[1] = max(yn, self.nbounds[1])
+        
+            self.image_files.append(fn)
+
+        assert(self.nbounds[0] >= 0)
+        assert(self.nbounds[1] >= 0)
+
+        self.nbounds[0] += 1
+        self.nbounds[1] += 1
+
+        print("Bounds: ", self.nbounds)
+
+        print("Checking completeness of file list ...")
+        for xn in range(0, self.nbounds[0]):
+            for yn in range(0, self.nbounds[1]):
+                assert("img_%d_%d.jpg" % (xn, yn) in self.image_files)
+
+        self.output_image = None
+
+        self.capture_params = {}
+        self.capture_params_hdr = {}
+        self.iso_mean = 0.0
+        self.exposure_time_mean = 0.0
+        self.borders = {}
+
+    def read_exif_stats(self):
+        print("Reading exif ...")
+        for xn in np.arange(0, self.nbounds[0]):
+            for yn in np.arange(0, self.nbounds[1]):
+                exif = read_exif(os.path.join(self.image_dir, "img_%d_%d.jpg" % (xn, yn)))
+                self.capture_params[(xn, yn)] = exif
+                self.iso_mean += exif["ISOSpeedRatings"]
+                self.exposure_time_mean += exif["ExposureTime"]
+                if os.path.exists(os.path.join(self.image_dir, "img_%d_%d_hdr.jpg" % (xn, yn))):
+                    exif_hdr = read_exif(os.path.join(self.image_dir, "img_%d_%d_hdr.jpg" % (xn, yn)))
+                    self.capture_params_hdr[(xn, yn)] = exif_hdr
+
+        self.iso_mean /= self.nbounds[0] * self.nbounds[1]
+        self.exposure_time_mean /= self.nbounds[0] * self.nbounds[1]
+
+        print("Mean ISO: %f" % self.iso_mean)
+        print("Mean exposure time: %f" % self.exposure_time_mean)
+
+    def get_tile(self, xn, yn):
+        data = read_raw(os.path.join(sys.argv[1], "img_%d_%d.jpg" % (xn, yn)))
+        data = superpixel_debayer(data)
+        data = downsample(data, self.DOWNSAMPLE)
+        data = np.rot90(data, 2) #.astype(np.float32)
+
+        hdr_threshold = 8000 * self.DOWNSAMPLE ** 2
+
+        if np.any(data > hdr_threshold * 0.75):
+            if os.path.exists(os.path.join(sys.argv[1], "img_%d_%d_hdr.jpg" % (xn, yn))):
+                data_hdr = read_raw(os.path.join(sys.argv[1], "img_%d_%d_hdr.jpg" % (xn, yn)))
+                data_hdr = superpixel_debayer(data_hdr)
+                data_hdr = downsample(data_hdr, self.DOWNSAMPLE)
+                data_hdr = np.rot90(data_hdr, 2) #.astype(np.float32)
+    
+                hdr_factor = self.capture_params[(xn, yn)]["ExposureTime"] / \
+                             self.capture_params_hdr[(xn, yn)]["ExposureTime"]
+
+                data = merge_hdr(data, data_hdr, hdr_threshold, hdr_factor)
+
+        #indexes = np.any(data > hdr_threshold, axis = 2)
+        #data[indexes, :] = data_hdr[indexes, :] * hdr_factor
+
+
+        #ccm_a, ccm_b = self.capture_params[(xn, yn)]["MakerNote"]["ccm"]
+        #for i in range(data.shape[0]):
+        #    for j in range(data.shape[1]):
+        #        data[i,j,:] = np.reshape((np.matmul(ccm_a, np.expand_dims(data[i,j,:], axis = 1)) + ccm_b), (3,))
+        #        m = int(np.amax(data))
+        #data /= self.capture_params[(xn, yn)]["ISOSpeedRatings"] / self.iso_mean
+        #data /= self.capture_params[(xn, yn)]["ExposureTime"] / self.exposure_time_mean
+        # data[:,:,0] *= float(self.capture_params[(xn, yn)]["MakerNote"]["gain_b"])
+        # data[:,:,2] *= float(self.capture_params[(xn, yn)]["MakerNote"]["gain_r"])
+        # data /= float(self.capture_params[(xn, yn)]["MakerNote"]["ag"])
+        return data
+
+    def stitch(self):
+        for xn in np.arange(0, self.nbounds[0]):
+            for yn in np.arange(0, self.nbounds[1]):
+                print("Processing (%d, %d)" % (xn, yn))
+                data = self.get_tile(xn, yn)
+                #self.borders[(xn, yn)] = {
+                #    "left": data[:, 0, :],
+                #    "right": data[:, -1, :],
+                #    "top": data[0, :, :],
+                #    "bottom": data[-1, :, :],
+                #}
+
+                if self.debug:
+                    data = cv2.putText(data, "%d,%d" % (xn, yn), (50, int(data.shape[0]/2)), cv2.FONT_HERSHEY_SIMPLEX, 3, (m, m, m), 15)
+
+                shiftx = -int((self.nbounds[0] - xn - 1) * data.shape[1] * self.overlap[0])
+                shifty = -int(yn * data.shape[0] * self.overlap[1])
+
+                if self.output_image is None:
+                    self.output_image = np.zeros((
+                        (self.nbounds[1]+1)*data.shape[0],
+                        (self.nbounds[0]+1)*data.shape[1],
+                        data.shape[2]
+                    ), dtype = np.float32)
+                    print("Initialized output image with shape: ", self.output_image.shape)
+
+                starty = yn * data.shape[0] + shifty
+                startx = (self.nbounds[0] - xn - 1) * data.shape[1] + shiftx
+
+                data = apply_gradients(data, self.overlap)
+
+                self.output_image[ starty : starty+data.shape[0], startx : startx+data.shape[1], : ] += data
+
+                self.output_image_downsized = self.output_image[::self.PREVIEW_DOWNSAMPLE, ::self.PREVIEW_DOWNSAMPLE, :]
+                self.output_image_downsized = (255 * (self.output_image_downsized / np.amax(self.output_image_downsized))).astype(np.uint8)
+                
+                cv2.imshow("output", self.output_image_downsized)
+                cv2.waitKey(1)
+
+    def save(self):
+        self.output_image = (65535 * (self.output_image / np.amax(self.output_image))).astype(np.uint16)
+        cv2.imwrite("output.tiff", self.output_image)
+        cv2.waitKey(0)
+
+    def start(self):
+        self.read_exif_stats()
+        self.stitch()
+        self.save()
+
+if __name__ == "__main__":
+    Stitch(sys.argv[1], debug = ("--debug" in sys.argv)).start()
