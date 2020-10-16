@@ -1,5 +1,7 @@
 vim
 screen
 python3-pip
+python3-pillow
 python3-opencv
 python3-numpy
+python3-scipy
