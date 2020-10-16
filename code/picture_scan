@@ -71,12 +71,14 @@ class PictureScan(object):
             os.system("mkdir -p output/%s" % self.fnstem)
 
         print("Setting settings ...")
-        self.picam.framerate = 1e6 / self.settings.get("shutter_speed", 32000)
-        self.picam.awb_mode = "off"
-        self.picam.awb_gains = self.settings.get("awb_gains", [1, -1])
-        self.picam.iso = self.settings.get("iso", 100)
         self.shutter_speed = self.settings.get("shutter_speed", 32000)
         self.shutter_speed_hdr = self.settings.get("shutter_speed_hdr")
+        print("shutter_speed (target)", self.shutter_speed)
+        print("shutter_speed_hdr (target)", self.shutter_speed_hdr)
+        self.picam.framerate = min(1e6 / self.settings.get("shutter_speed", 32000), 30)
+        self.picam.awb_mode = "off"
+        self.picam.awb_gains = self.settings.get("awb_gains", [1.0, 1.0])
+        self.picam.iso = self.settings.get("iso", 100)
         self.picam.shutter_speed = self.shutter_speed
         time.sleep(2)
         self.picam.exposure_mode = self.settings.get("exposure_mode", "off")
@@ -125,15 +127,21 @@ class PictureScan(object):
                     self.steppers[0].goto(int(target_coords[0]))
                     print("Moving stepper 1")
                     self.steppers[1].goto(int(target_coords[1]))
+                    time.sleep(1)
                     print("Taking picture")
                     filename = next(irritator)
-                    print("Moving file")
-                    os.rename(filename, os.path.join("output", self.fnstem, "img_%d_%d.jpg" % (ixn, iyn)))
+                    filename_target = os.path.join("output", self.fnstem, "img_%d_%d.jpg" % (ixn, iyn))
+                    print("Moving file %s to %s" % (filename, filename_target))
+                    os.rename(filename, filename_target)
+
                     if self.shutter_speed_hdr:
                         self.picam.shutter_speed = self.shutter_speed_hdr
+                        print("Taking picture (hdr)")
                         filename = next(irritator)
+                        filename_target = os.path.join("output", self.fnstem, "img_%d_%d_hdr.jpg" % (ixn, iyn))
                         self.picam.shutter_speed = self.shutter_speed
-                        os.rename(filename, os.path.join("output", self.fnstem, "img_%d_%d_hdr.jpg" % (ixn, iyn)))
+                        print("Moving file %s to %s" % (filename, filename_target))
+                        os.rename(filename, filename_target)
 
         if not DRY_RUN:
             with open(os.path.join("output/%s" % self.fnstem, "profile.json"), "w") as f:
