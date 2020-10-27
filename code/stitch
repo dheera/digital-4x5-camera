@@ -9,11 +9,12 @@ import numpy as np
 import time
 from camera.helpers import *
 from numba import jit
+from shutil import copyfile
 
 class Stitch(object):
     def __init__(self, image_dir, debug = False):
-        self.DOWNSAMPLE = 4
-        self.PREVIEW_DOWNSAMPLE = 4
+        self.DOWNSAMPLE = 2
+        self.PREVIEW_DOWNSAMPLE = 16
         self.debug = debug
         self.image_dir = image_dir
 
@@ -60,7 +61,11 @@ class Stitch(object):
         print("Checking completeness of file list ...")
         for xn in range(0, self.nbounds[0]):
             for yn in range(0, self.nbounds[1]):
-                assert("img_%d_%d.jpg" % (xn, yn) in self.image_files)
+                try:
+                    assert("img_%d_%d.jpg" % (xn, yn) in self.image_files)
+                except:
+                    print("Warning: img_%d_%d.jpg not found, coping img_0_0.jpg in its place" % (xn, yn))
+                    copyfile(os.path.join(self.image_dir, "img_0_0.jpg"), os.path.join(self.image_dir, "img_%d_%d.jpg" % (xn, yn)))
 
         self.output_image = None
 
@@ -165,7 +170,7 @@ class Stitch(object):
 
     def save(self):
         self.output_image = (65535 * (self.output_image / np.amax(self.output_image))).astype(np.uint16)
-        cv2.imwrite("output.tiff", self.output_image)
+        cv2.imwrite(os.path.join(self.image_dir, "output_stitched.tiff"), self.output_image)
         cv2.waitKey(0)
 
     def start(self):
