@@ -14,7 +14,7 @@ from shutil import copyfile
 class Stitch(object):
     def __init__(self, image_dir, debug = False):
         self.DOWNSAMPLE = 2
-        self.PREVIEW_DOWNSAMPLE = 16
+        self.PREVIEW_DOWNSAMPLE = 8
         self.debug = debug
         self.image_dir = image_dir
         self.working_dir = os.path.join(self.image_dir, "tmp")
@@ -79,6 +79,8 @@ class Stitch(object):
         self.exposure_time_mean = 0.0
         self.borders = {}
         self.proxies = {}
+        self.correction_grad = {}
+        self.correction_grad_proxy = {}
         self.proxy_factor = 4
 
     def read_exif_stats(self):
@@ -121,6 +123,11 @@ class Stitch(object):
 
         return data
 
+    def get_tile(self, xn, yn):
+        fn = os.path.join(self.working_dir, "tile_%d_%d.npy" % (xn, yn))
+        data = np.load(fn)
+        return data
+
     def preprocess(self):
         print("Preprocessing ...")
         for xn in np.arange(0, self.nbounds[0]):
@@ -135,17 +142,21 @@ class Stitch(object):
                 else:
                     data = self.preprocess_tile(xn, yn)
                     data_proxy = data[::self.proxy_factor, ::self.proxy_factor, :]
+                    self.proxies[(xn, yn)] = data_proxy
                     np.save(fn, data)
                     np.save(fn_proxy, data_proxy)
 
     def stitch_proxy(self):
         print("Proxy stitch")
         for xn in np.arange(0, self.nbounds[0]):
+          for yn in np.arange(0, self.nbounds[1]):
+            self.correction_grad_proxy[(xn, yn)] = np.ones(self.proxies[(xn, yn)].shape, dtype = np.float32)
+
+        for q in range(5):
+          for xn in np.arange(0, self.nbounds[0]):
             for yn in np.arange(0, self.nbounds[1]):
                 print("Processing (%d, %d)" % (xn, yn))
-
                 data = self.proxies[(xn, yn)]
-
                 x_overlap_proxy_px = int(data.shape[1] * self.overlap[0])
                 y_overlap_proxy_px = int(data.shape[0] * self.overlap[1])
                 if yn <= self.nbounds[1] / 2: # top half
@@ -153,39 +164,55 @@ class Stitch(object):
                     row_b = self.proxies[(xn, yn + 1)][0:y_overlap_proxy_px, :, :]
                     mean_a = np.mean(row_a, axis = (0, 1))
                     mean_b = np.mean(row_b, axis = (0, 1))
-                    print(mean_a, mean_b)
                     edge_correction = mean_a / mean_b
-                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(0, 1, data.shape[0]), axis = 1), data.shape[1], axis = 1), 2)
+                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(0, 1, data.shape[0]) ** 1.8, axis = 1), data.shape[1], axis = 1), 2)
                     correction_grad = unit_grad * edge_correction + (1 - unit_grad)
                     data = data / correction_grad
+                    self.correction_grad_proxy[(xn, yn)] = self.correction_grad_proxy[(xn, yn)] / correction_grad
                 if yn > self.nbounds[1] / 2: # bottom half
                     row_a = data[0:y_overlap_proxy_px, :, :]
                     row_b = self.proxies[(xn, yn - 1)][-y_overlap_proxy_px:-1, :, :]
                     mean_a = np.mean(row_a, axis = (0, 1))
                     mean_b = np.mean(row_b, axis = (0, 1))
                     edge_correction = mean_a / mean_b
-                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(1, 0, data.shape[0]), axis = 1), data.shape[1], axis = 1), 2)
+                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(1, 0, data.shape[0]) ** 1.8, axis = 1), data.shape[1], axis = 1), 2)
                     correction_grad = unit_grad * edge_correction + (1 - unit_grad)
                     data = data / correction_grad
+                    self.correction_grad_proxy[(xn, yn)] = self.correction_grad_proxy[(xn, yn)] / correction_grad
+                self.proxies[(xn, yn)] = data
+          for xn in reversed(np.arange(0, self.nbounds[0])):
+            for yn in np.arange(0, self.nbounds[1]):
+                print("Processing (%d, %d)" % (xn, yn))
+                data = self.proxies[(xn, yn)]
+                x_overlap_proxy_px = int(data.shape[1] * self.overlap[0])
+                y_overlap_proxy_px = int(data.shape[0] * self.overlap[1])
                 if xn <= self.nbounds[0] / 2: # right half
                     row_a = data[:, 0:x_overlap_proxy_px, :]
                     row_b = self.proxies[(xn + 1, yn)][:, -x_overlap_proxy_px:-1, :]
                     mean_a = np.mean(row_a, axis = (0, 1))
                     mean_b = np.mean(row_b, axis = (0, 1))
                     edge_correction = mean_a / mean_b
-                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(1, 0, data.shape[1]), axis = 0), data.shape[0], axis = 0), 2)
+                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(1, 0, data.shape[1]) ** 1.8, axis = 0), data.shape[0], axis = 0), 2)
                     correction_grad = unit_grad * edge_correction + (1 - unit_grad)
                     data = data / correction_grad
+                    self.correction_grad_proxy[(xn, yn)] = self.correction_grad_proxy[(xn, yn)] / correction_grad
                 if xn > self.nbounds[0] / 2: # left half
                     row_a = data[:, -x_overlap_proxy_px:-1, :]
                     row_b = self.proxies[(xn - 1, yn)][:, 0:x_overlap_proxy_px, :]
                     mean_a = np.mean(row_a, axis = (0, 1))
                     mean_b = np.mean(row_b, axis = (0, 1))
                     edge_correction = mean_a / mean_b
-                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(0, 1, data.shape[1]), axis = 0), data.shape[0], axis = 0), 2)
+                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(0, 1, data.shape[1]) ** 1.8, axis = 0), data.shape[0], axis = 0), 2)
                     correction_grad = unit_grad * edge_correction + (1 - unit_grad)
                     data = data / correction_grad
+                    self.correction_grad_proxy[(xn, yn)] = self.correction_grad_proxy[(xn, yn)] / correction_grad
+                self.proxies[(xn, yn)] = data
 
+        for xn in np.arange(0, self.nbounds[0]):
+            for yn in np.arange(0, self.nbounds[1]):
+                print("Processing (%d, %d)" % (xn, yn))
+
+                data = self.proxies[(xn, yn)]
                 shiftx = -int((self.nbounds[0] - xn - 1) * data.shape[1] * self.overlap[0])
                 shifty = -int(yn * data.shape[0] * self.overlap[1])
 
@@ -211,12 +238,9 @@ class Stitch(object):
             for yn in np.arange(0, self.nbounds[1]):
                 print("Processing (%d, %d)" % (xn, yn))
                 data = self.get_tile(xn, yn)
-                #self.borders[(xn, yn)] = {
-                #    "left": data[:, 0, :],
-                #    "right": data[:, -1, :],
-                #    "top": data[0, :, :],
-                #    "bottom": data[-1, :, :],
-                #}
+                self.correction_grad[(xn, yn)] = cv2.resize(self.correction_grad_proxy[(xn, yn)], (data.shape[1], data.shape[0]))
+
+                data = data * self.correction_grad[(xn, yn)]
 
                 if self.debug:
                     data = cv2.putText(data, "%d,%d" % (xn, yn), (50, int(data.shape[0]/2)), cv2.FONT_HERSHEY_SIMPLEX, 3, (m, m, m), 15)
@@ -246,7 +270,8 @@ class Stitch(object):
                 cv2.waitKey(1)
 
     def save(self):
-        self.output_image = (65535 * (self.output_image / np.amax(self.output_image))).astype(np.uint16)
+        self.output_image = (255 * (self.output_image / np.amax(self.output_image))).astype(np.uint8)
+        # self.output_image = (65535 * (self.output_image / np.amax(self.output_image))).astype(np.uint16)
         cv2.imwrite(os.path.join(self.image_dir, "output_stitched.tiff"), self.output_image)
         cv2.waitKey(0)
 
@@ -254,8 +279,8 @@ class Stitch(object):
         self.read_exif_stats()
         self.preprocess()
         self.stitch_proxy()
-        # self.stitch()
-        # self.save()
+        self.stitch()
+        self.save()
 
 if __name__ == "__main__":
     Stitch(sys.argv[1], debug = ("--debug" in sys.argv)).start()
