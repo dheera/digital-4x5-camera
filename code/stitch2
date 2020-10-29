@@ -109,17 +109,20 @@ class Stitch(object):
 
         hdr_threshold = 8000 * self.DOWNSAMPLE ** 2
 
-        if np.any(data > hdr_threshold * 0.75):
-            if os.path.exists(os.path.join(sys.argv[1], "img_%d_%d_hdr.jpg" % (xn, yn))):
-                data_hdr = read_raw(os.path.join(sys.argv[1], "img_%d_%d_hdr.jpg" % (xn, yn)))
-                data_hdr = superpixel_debayer(data_hdr)
-                data_hdr = downsample(data_hdr, self.DOWNSAMPLE)
-                data_hdr = np.rot90(data_hdr, 2) #.astype(np.float32)
-    
-                hdr_factor = self.capture_params[(xn, yn)]["ExposureTime"] / \
-                             self.capture_params_hdr[(xn, yn)]["ExposureTime"]
+        if os.path.exists(os.path.join(sys.argv[1], "img_%d_%d_hdra.jpg" % (xn, yn))):
+            hdr_factor = self.capture_params[(xn, yn)]["ExposureTime"] / \
+                         self.capture_params_hdr[(xn, yn)]["ExposureTime"]
 
+            data_hdr = read_raw(os.path.join(sys.argv[1], "img_%d_%d_hdr.jpg" % (xn, yn)))
+            data_hdr = superpixel_debayer(data_hdr)
+            data_hdr = downsample(data_hdr, self.DOWNSAMPLE)
+            data_hdr = np.rot90(data_hdr, 2) #.astype(np.float32)
+
+            if hdr_factor > 1:
                 data = merge_hdr(data, data_hdr, hdr_threshold, hdr_factor)
+            else:
+                hdr_factor = 1 / hdr_factor
+                data = merge_hdr(data_hdr, data, hdr_threshold, hdr_factor)
 
         return data
 
@@ -153,6 +156,7 @@ class Stitch(object):
             self.correction_grad_proxy[(xn, yn)] = np.ones(self.proxies[(xn, yn)].shape, dtype = np.float32)
 
         for q in range(5):
+          power = 1.5
           for xn in np.arange(0, self.nbounds[0]):
             for yn in np.arange(0, self.nbounds[1]):
                 print("Processing (%d, %d)" % (xn, yn))
@@ -165,7 +169,7 @@ class Stitch(object):
                     mean_a = np.mean(row_a, axis = (0, 1))
                     mean_b = np.mean(row_b, axis = (0, 1))
                     edge_correction = mean_a / mean_b
-                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(0, 1, data.shape[0]) ** 1.8, axis = 1), data.shape[1], axis = 1), 2)
+                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(0, 1, data.shape[0]) ** power, axis = 1), data.shape[1], axis = 1), 2)
                     correction_grad = unit_grad * edge_correction + (1 - unit_grad)
                     data = data / correction_grad
                     self.correction_grad_proxy[(xn, yn)] = self.correction_grad_proxy[(xn, yn)] / correction_grad
@@ -175,7 +179,7 @@ class Stitch(object):
                     mean_a = np.mean(row_a, axis = (0, 1))
                     mean_b = np.mean(row_b, axis = (0, 1))
                     edge_correction = mean_a / mean_b
-                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(1, 0, data.shape[0]) ** 1.8, axis = 1), data.shape[1], axis = 1), 2)
+                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(1, 0, data.shape[0]) ** power, axis = 1), data.shape[1], axis = 1), 2)
                     correction_grad = unit_grad * edge_correction + (1 - unit_grad)
                     data = data / correction_grad
                     self.correction_grad_proxy[(xn, yn)] = self.correction_grad_proxy[(xn, yn)] / correction_grad
@@ -192,7 +196,7 @@ class Stitch(object):
                     mean_a = np.mean(row_a, axis = (0, 1))
                     mean_b = np.mean(row_b, axis = (0, 1))
                     edge_correction = mean_a / mean_b
-                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(1, 0, data.shape[1]) ** 1.8, axis = 0), data.shape[0], axis = 0), 2)
+                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(1, 0, data.shape[1]) ** power, axis = 0), data.shape[0], axis = 0), 2)
                     correction_grad = unit_grad * edge_correction + (1 - unit_grad)
                     data = data / correction_grad
                     self.correction_grad_proxy[(xn, yn)] = self.correction_grad_proxy[(xn, yn)] / correction_grad
@@ -202,7 +206,7 @@ class Stitch(object):
                     mean_a = np.mean(row_a, axis = (0, 1))
                     mean_b = np.mean(row_b, axis = (0, 1))
                     edge_correction = mean_a / mean_b
-                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(0, 1, data.shape[1]) ** 1.8, axis = 0), data.shape[0], axis = 0), 2)
+                    unit_grad = np.expand_dims(np.repeat(np.expand_dims(np.linspace(0, 1, data.shape[1]) ** power, axis = 0), data.shape[0], axis = 0), 2)
                     correction_grad = unit_grad * edge_correction + (1 - unit_grad)
                     data = data / correction_grad
                     self.correction_grad_proxy[(xn, yn)] = self.correction_grad_proxy[(xn, yn)] / correction_grad
@@ -270,9 +274,10 @@ class Stitch(object):
                 cv2.waitKey(1)
 
     def save(self):
-        self.output_image = (255 * (self.output_image / np.amax(self.output_image))).astype(np.uint8)
-        # self.output_image = (65535 * (self.output_image / np.amax(self.output_image))).astype(np.uint16)
-        cv2.imwrite(os.path.join(self.image_dir, "output_stitched.tiff"), self.output_image)
+        self.output_image_16 = (65535 * (self.output_image / np.amax(self.output_image))).astype(np.uint16)
+        self.output_image_16_proxy = self.output_image_16[::4,::4, :]
+        cv2.imwrite(os.path.join(self.image_dir, "output_stitched_16.tiff"), self.output_image_16)
+        cv2.imwrite(os.path.join(self.image_dir, "output_stitched_16_proxy.tiff"), self.output_image_16_proxy)
         cv2.waitKey(0)
 
     def start(self):
